@@ -18,6 +18,7 @@ esphome:
     then:
       - lambda: "id(internal_amperage_sensor)->publish_state(${default_amperage});"
       - lambda: "id(amperage_sensor)->publish_state(${default_amperage});"
+      - uart.write: "evse_state\r"
 
 wifi:
   ssid: !secret wifi_ssid
@@ -76,20 +77,30 @@ text_sensor:
                 // id(uart_bus)->write_str("$GG*B2\r");
               // }
 
-
               if(id(uart_readline).state.find("en charge") != std::string::npos){
                 id(car_sensor)->publish_state(true);
                 id(car_sensor_charging)->publish_state(true);
               } else if(id(uart_readline).state.find("Verrouillage du cble") != std::string::npos){
                 id(car_sensor)->publish_state(true);
                 // Etat intermidaire, demande d'update par la borne de l'etat en cours (charge ou pas).
-                id(uart_bus)->write_str("$GG*B2\r");
-              } else if(id(uart_readline).state.find("Dverrouillage du cble") != std::string::npos){
+                id(uart_bus)->write_str("evse_state\r");
+              } else if(
+                  id(uart_readline).state.find("Dverrouillage du cble") != std::string::npos ||
+                  id(uart_readline).state.find("Dverdu cble") != std::string::npos
+                ){
                 id(car_sensor)->publish_state(false);
                 id(car_sensor_charging)->publish_state(false);                
-              } else if(id(uart_readline).state.find("Dverdu cble") != std::string::npos){
-                id(car_sensor)->publish_state(false);
-                id(car_sensor_charging)->publish_state(false);                
+              } else if(id(uart_readline).state.find("EVSE state :") != std::string::npos){
+                std::vector<std::string> v;
+                split(id(uart_readline).state, v, ' ');
+                if(v.size() == 4){
+                  // 0 => Cable déconnecté
+                  // 1 => Cable connecté
+                  // 2 => Cable connecté et en charge 
+                  id(car_sensor)->publish_state(getInteger(v.at(3)) > 0);
+                  id(car_sensor_charging)->publish_state(getInteger(v.at(3)) == 2);
+                  
+                }
               } else if(id(uart_readline).state.find("Charge autorise") != std::string::npos){
                 // Quand c'est le véhicule qui interrompt la charge. La borne retourne ce message.
                 id(car_sensor_charging)->publish_state(false);
@@ -100,19 +111,15 @@ text_sensor:
                   std::vector<std::string> v;
                   // Split du retour de la borne pour obtenir v[1] == Ampérage, v[2] === Voltage 
                   split(id(uart_readline).state, v, ' ');
-                  
-                  // On indique que la voiture est là
-                  id(car_sensor)->publish_state(true);
 
                   if(v.size() >= 3){
                     // Match avec $OK amperage voltage
-                    id(car_sensor_charging)->publish_state(getInteger(v.at(1)) > 0 && getInteger(v.at(2)) > 0);
+                    id(car_sensor_charging)->publish_state(getInteger(v.at(1)) > 0 && getInteger(v.at(2)) > 1);
+                    id(amperage_sensor)->publish_state(getInteger(v.at(1)));
                   } else if (v.size() == 2){
                     // Match avec seulement l'amperage $OK amperage
                     id(car_sensor_charging)->publish_state(getInteger(v.at(1)) > 0);
-                  } else {
-                    // Cas par default
-                    id(car_sensor_charging)->publish_state(true);
+                    id(amperage_sensor)->publish_state(getInteger(v.at(1)));
                   }
               }
 
@@ -144,6 +151,13 @@ sensor:
         return (id(amperage_sensor).state * ${home_voltage}) / 1000;
       }
 
+button:
+  - platform: template
+    name: "État borne VE-Tronic"
+    on_press:
+      then:
+        - uart.write: "evse_state\r"
+
 binary_sensor:
   - platform: template
     name: "VETronic: Car Connected"
@@ -171,6 +185,8 @@ number:
             return std::vector<unsigned char>( s.begin(), s.end() );
         - delay: 1s
         - uart.write: "$GG*B2\r"
+        - delay: 1s
+        - uart.write: "evse_state\r"
 
 switch:
   - platform: template
@@ -183,7 +199,8 @@ switch:
           std::string s = buf;
           return std::vector<unsigned char>( s.begin(), s.end() );
     turn_off_action:
-      - lambda: "id(amperage_sensor)->publish_state(0);"
       - uart.write: "$SC 0\r"
       - delay: 1s
       - uart.write: "$GG*B2\r"
+      - delay: 1s
+      - uart.write: "evse_state\r"
