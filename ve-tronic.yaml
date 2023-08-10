@@ -115,11 +115,11 @@ text_sensor:
                   if(v.size() >= 3){
                     // Match avec $OK amperage voltage
                     id(car_sensor_charging)->publish_state(getInteger(v.at(1)) > 0 && getInteger(v.at(2)) > 1);
-                    id(amperage_sensor)->publish_state(getInteger(v.at(1)));
+                    id(amperage_sensor)->publish_state(getInteger(v.at(1)) / 1000);
                   } else if (v.size() == 2){
                     // Match avec seulement l'amperage $OK amperage
                     id(car_sensor_charging)->publish_state(getInteger(v.at(1)) > 0);
-                    id(amperage_sensor)->publish_state(getInteger(v.at(1)));
+                    id(amperage_sensor)->publish_state(getInteger(v.at(1)) / 1000);
                   }
               }
 
