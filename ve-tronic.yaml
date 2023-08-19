@@ -184,8 +184,8 @@ number:
             std::string s = buf;
             return std::vector<unsigned char>( s.begin(), s.end() );
         - delay: 1s
-        - uart.write: "$GG*B2\r"
-        - delay: 1s
+        #- uart.write: "$GG*B2\r"
+        #- delay: 1s
         - uart.write: "evse_state\r"
 
 switch:
@@ -200,7 +200,7 @@ switch:
           return std::vector<unsigned char>( s.begin(), s.end() );
     turn_off_action:
       - uart.write: "$SC 0\r"
-      - delay: 1s
+      - delay: 2s
       - uart.write: "$GG*B2\r"
-      - delay: 1s
+      - delay: 2s
       - uart.write: "evse_state\r"
