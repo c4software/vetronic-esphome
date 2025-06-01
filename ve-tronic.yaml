@@ -6,19 +6,28 @@ substitutions:
   default_amperage: "6"
   home_voltage: "230"
 
+external_components:
+  - source:
+      type: git
+      url: https://github.com/robertklep/esphome-custom-component
+    components: [custom, custom_component]
+
 esphome:
   includes:
     - uart_reader.h
     - split_string.h
   name: "${device_name}"
-  platform: ESP8266
-  board: d1_mini
   on_boot:
     priority: 600
     then:
       - lambda: "id(internal_amperage_sensor)->publish_state(${default_amperage});"
       - lambda: "id(amperage_sensor)->publish_state(${default_amperage});"
-      - uart.write: "evse_state\r"
+      - uart.write: "\revse_state\r"
+
+esp8266:
+  board: d1_mini
+  framework:
+    version: recommended
 
 wifi:
   ssid: !secret wifi_ssid
@@ -47,7 +56,8 @@ api:
     key: YOUR-ENCRYPTION-KEY-FROM-HOME-ASSISTANT
 
 ota:
-  password: !secret ota_password
+  - platform: esphome
+    password: !secret ota_password
 
 uart:
   id: "uart_bus"
@@ -74,7 +84,7 @@ text_sensor:
               // Mais c'est trop rapide et elle indique encore charger alors que non…
               // if(id(uart_readline).state.find("Indication du courant dispo") != std::string::npos){
                 // Etat intermidaire, demande d'update par la borne de l'etat en cours (charge ou pas). 
-                // id(uart_bus)->write_str("$GG*B2\r");
+                // id(uart_bus)->write_str("\r$GG*B2\r");
               // }
 
               if(id(uart_readline).state.find("en charge") != std::string::npos){
@@ -83,7 +93,7 @@ text_sensor:
               } else if(id(uart_readline).state.find("Verrouillage du cble") != std::string::npos){
                 id(car_sensor)->publish_state(true);
                 // Etat intermidaire, demande d'update par la borne de l'etat en cours (charge ou pas).
-                id(uart_bus)->write_str("evse_state\r");
+                id(uart_bus)->write_str("\revse_state\r");
               } else if(
                   id(uart_readline).state.find("Dverrouillage du cble") != std::string::npos ||
                   id(uart_readline).state.find("Dverdu cble") != std::string::npos
@@ -153,10 +163,10 @@ sensor:
 
 button:
   - platform: template
-    name: "État borne VE-Tronic"
+    name: "EVSE State"
     on_press:
       then:
-        - uart.write: "evse_state\r"
+        - uart.write: "\revse_state\r"
 
 binary_sensor:
   - platform: template
@@ -180,13 +190,13 @@ number:
       then:
         - lambda: "id(amperage_sensor)->publish_state(x);"
         - uart.write: !lambda char buf[128];
-            sprintf(buf, "$SC %d\r", (int) id(amperage_sensor).state);
+            sprintf(buf, "\r$SC %d\r", (int) id(amperage_sensor).state);
             std::string s = buf;
             return std::vector<unsigned char>( s.begin(), s.end() );
         - delay: 1s
         #- uart.write: "$GG*B2\r"
         #- delay: 1s
-        - uart.write: "evse_state\r"
+        - uart.write: "\revse_state\r"
 
 switch:
   - platform: template
@@ -199,8 +209,8 @@ switch:
           std::string s = buf;
           return std::vector<unsigned char>( s.begin(), s.end() );
     turn_off_action:
-      - uart.write: "$SC 0\r"
+      - uart.write: "\r$SC 0\r"
       - delay: 2s
-      - uart.write: "$GG*B2\r"
+      - uart.write: "\r$GG*B2\r"
       - delay: 2s
-      - uart.write: "evse_state\r"
+      - uart.write: "\revse_state\r"
